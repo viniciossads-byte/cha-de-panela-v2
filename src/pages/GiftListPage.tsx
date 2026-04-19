@@ -43,12 +43,16 @@ export default function GiftListPage() {
 
   const handleReserve = async (giftId: string) => {
     const gift = gifts.find(g => g.id === giftId)
+    // Open window synchronously (before await) so mobile browsers don't block it
+    const newTab = gift?.link ? window.open('', '_blank') : null
     const ok = await reserve(giftId, user!.name)
     setConfirming(null)
     if (ok) {
-      if (gift?.link) window.open(gift.link, '_blank', 'noopener,noreferrer')
+      if (newTab && gift?.link) newTab.location.href = gift.link
+      else newTab?.close()
       showToast('Presente escolhido! Abrimos o link como sugestão — você pode comprar onde preferir. 🎁', 'success')
     } else {
+      newTab?.close()
       showToast('Ops, alguém acabou de reservar esse presente.', 'error')
     }
   }
