@@ -1,0 +1,232 @@
+import { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { useGifts } from '@/hooks/useGifts'
+import { CATEGORIES, Category } from '@/lib/gifts'
+import { Heart, LogOut, Check, Lock, ChevronDown } from 'lucide-react'
+
+export default function GiftListPage() {
+  const { user, logout } = useAuth()
+  const { gifts, loading, reserve, unreserve } = useGifts()
+  const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos')
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  const showToast = (msg: string, type: 'success' | 'error') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  const filtered = activeCategory === 'Todos'
+    ? gifts
+    : gifts.filter(g => g.category === activeCategory)
+
+  const myReserved = gifts.filter(g => g.reserved_by === user)
+
+  const handleReserve = async (giftId: string) => {
+    const ok = await reserve(giftId, user!)
+    setConfirming(null)
+    if (ok) showToast('Presente escolhido com sucesso! 🎁', 'success')
+    else showToast('Ops, alguém acabou de reservar esse presente.', 'error')
+  }
+
+  const handleUnreserve = async (giftId: string) => {
+    const ok = await unreserve(giftId, user!)
+    if (ok) showToast('Reserva cancelada.', 'success')
+    else showToast('Não foi possível cancelar. Tente novamente.', 'error')
+  }
+
+  return (
+    <div className="min-h-screen bg-cream">
+      {/* Header */}
+      <header className="bg-white border-b border-gold-light sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Heart className="h-4 w-4 text-gold fill-gold" />
+            <span className="font-display text-lg font-semibold text-gray-800">
+              Vini & Victoria
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500 hidden sm:block">
+              Olá, <span className="text-gray-700 font-medium">{user}</span>
+            </span>
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* Hero */}
+        <div className="text-center mb-10">
+          <h2 className="font-display text-4xl md:text-5xl font-semibold text-gray-800 mb-3">
+            Lista de Presentes
+          </h2>
+          <p className="text-gray-500 max-w-md mx-auto leading-relaxed">
+            Estamos montando nossa casa e ficamos muito felizes por você fazer parte desse momento.
+          </p>
+        </div>
+
+        {/* My reservations banner */}
+        {myReserved.length > 0 && (
+          <div className="bg-gold-light border border-gold rounded-2xl p-4 mb-8 flex items-start gap-3">
+            <Check className="h-5 w-5 text-gold-dark mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-gold-dark mb-1">
+                Você escolheu {myReserved.length} presente{myReserved.length > 1 ? 's' : ''}:
+              </p>
+              <ul className="text-sm text-gold-dark space-y-0.5">
+                {myReserved.map(g => (
+                  <li key={g.id} className="flex items-center gap-2">
+                    <span>• {g.name}</span>
+                    <button
+                      onClick={() => handleUnreserve(g.id)}
+                      className="text-xs underline opacity-60 hover:opacity-100"
+                    >
+                      cancelar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Category filter */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide">
+          {(['Todos', ...CATEGORIES] as const).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-150 ${
+                activeCategory === cat
+                  ? 'bg-gold text-white'
+                  : 'bg-white text-gray-500 border border-gray-200 hover:border-gold hover:text-gold'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Grid */}
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filtered.map(gift => {
+              const isReservedByMe = gift.reserved_by === user
+              const isReservedByOther = gift.reserved_by && gift.reserved_by !== user
+              const isConfirming = confirming === gift.id
+
+              return (
+                <div
+                  key={gift.id}
+                  className={`bg-white rounded-2xl overflow-hidden border transition-all duration-200 ${
+                    isReservedByOther
+                      ? 'border-gray-100 opacity-60'
+                      : isReservedByMe
+                      ? 'border-gold shadow-md'
+                      : 'border-gray-100 hover:shadow-md hover:border-gold-light'
+                  }`}
+                >
+                  {/* Image */}
+                  <div className="relative h-44 overflow-hidden">
+                    <img
+                      src={gift.image}
+                      alt={gift.name}
+                      className="w-full h-full object-cover"
+                    />
+                    {isReservedByOther && (
+                      <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                        <div className="bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
+                          <Lock className="h-3 w-3 text-gray-400" />
+                          <span className="text-xs text-gray-500">Reservado</span>
+                        </div>
+                      </div>
+                    )}
+                    {isReservedByMe && (
+                      <div className="absolute top-3 right-3 bg-gold rounded-full p-1.5 shadow">
+                        <Check className="h-3.5 w-3.5 text-white" />
+                      </div>
+                    )}
+                    <span className="absolute top-3 left-3 bg-white/90 text-xs text-gray-500 px-2 py-1 rounded-full">
+                      {gift.category}
+                    </span>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-800 mb-1">{gift.name}</h3>
+                    <p className="text-xs text-gray-400 mb-3 leading-relaxed">{gift.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="font-display text-lg text-gold font-semibold">
+                        R$ {gift.price.toFixed(2).replace('.', ',')}
+                      </span>
+
+                      {isReservedByMe ? (
+                        <span className="text-xs text-gold font-medium flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Escolhido por você
+                        </span>
+                      ) : isReservedByOther ? (
+                        <span className="text-xs text-gray-400">Já reservado</span>
+                      ) : isConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setConfirming(null)}
+                            className="text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => handleReserve(gift.id)}
+                            className="text-xs bg-gold text-white px-3 py-1.5 rounded-lg hover:bg-gold-dark transition-colors"
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirming(gift.id)}
+                          className="text-xs bg-gray-800 hover:bg-gold text-white px-4 py-2 rounded-lg transition-colors duration-200"
+                        >
+                          Escolher
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {!loading && filtered.length === 0 && (
+          <div className="text-center py-20 text-gray-400">
+            <p>Nenhum presente nessa categoria.</p>
+          </div>
+        )}
+      </main>
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-50 transition-all duration-300 ${
+            toast.type === 'success'
+              ? 'bg-gray-800 text-white'
+              : 'bg-red-500 text-white'
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
