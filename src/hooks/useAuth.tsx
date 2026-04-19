@@ -1,30 +1,43 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { supabase } from '@/lib/supabase'
+
+export interface Guest {
+  name: string
+  email: string
+  phone: string
+}
 
 interface AuthContextType {
-  user: string | null
+  user: Guest | null
   loading: boolean
-  login: (name: string) => void
+  login: (guest: Guest) => Promise<void>
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
-
-const STORAGE_KEY = 'vini_victoria_guest'
+const STORAGE_KEY = 'vini_victoria_guest_v2'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<string | null>(null)
+  const [user, setUser] = useState<Guest | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) setUser(stored)
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) setUser(JSON.parse(stored))
+    } catch { /* ignore */ }
     setLoading(false)
   }, [])
 
-  const login = (name: string) => {
-    const trimmed = name.trim()
-    localStorage.setItem(STORAGE_KEY, trimmed)
-    setUser(trimmed)
+  const login = async (guest: Guest) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(guest))
+    setUser(guest)
+    if (supabase) {
+      await supabase.from('guests').upsert(
+        { name: guest.name, email: guest.email, phone: guest.phone },
+        { onConflict: 'email' }
+      )
+    }
   }
 
   const logout = () => {

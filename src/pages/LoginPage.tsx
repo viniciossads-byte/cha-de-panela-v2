@@ -5,24 +5,26 @@ import { Heart } from 'lucide-react'
 
 export default function LoginPage() {
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (name.trim().length < 2) {
-      setError('Por favor, insira seu nome completo.')
-      return
-    }
-    login(name.trim())
+    if (name.trim().length < 2) { setError('Por favor, insira seu nome completo.'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Insira um e-mail válido.'); return }
+    if (phone.replace(/\D/g, '').length < 10) { setError('Insira um telefone válido com DDD.'); return }
+    setLoading(true)
+    await login({ name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim() })
     navigate('/')
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-cream">
       <div className="w-full max-w-sm">
-        {/* Header */}
         <div className="text-center mb-10">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12 bg-gold" />
@@ -35,16 +37,15 @@ export default function LoginPage() {
           <p className="text-sm text-gray-500 tracking-wide uppercase">Lista de Presentes</p>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-2xl shadow-sm border border-gold-light p-8">
           <p className="text-gray-600 text-sm text-center mb-6 leading-relaxed">
-            Insira seu nome para acessar a lista e escolher seu presente.
+            Preencha seus dados para acessar a lista e escolher seu presente.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-                Seu nome
+                Nome completo
               </label>
               <input
                 type="text"
@@ -54,14 +55,42 @@ export default function LoginPage() {
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent text-gray-800 placeholder-gray-300 transition"
                 autoFocus
               />
-              {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
             </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                E-mail
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError('') }}
+                placeholder="Ex: joao@email.com"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent text-gray-800 placeholder-gray-300 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                Telefone / WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => { setPhone(e.target.value); setError('') }}
+                placeholder="Ex: (11) 99999-9999"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent text-gray-800 placeholder-gray-300 transition"
+              />
+            </div>
+
+            {error && <p className="text-xs text-red-500">{error}</p>}
 
             <button
               type="submit"
-              className="w-full bg-gold hover:bg-gold-dark text-white font-medium py-3 rounded-xl transition-colors duration-200"
+              disabled={loading}
+              className="w-full bg-gold hover:bg-gold-dark text-white font-medium py-3 rounded-xl transition-colors duration-200 disabled:opacity-60"
             >
-              Ver Lista de Presentes
+              {loading ? 'Entrando...' : 'Ver Lista de Presentes'}
             </button>
           </form>
         </div>

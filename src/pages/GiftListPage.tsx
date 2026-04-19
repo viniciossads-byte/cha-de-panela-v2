@@ -34,15 +34,16 @@ export default function GiftListPage() {
     setTimeout(() => setToast(null), 5000)
   }
 
-  const filtered = activeCategory === 'Todos'
+  const myReserved = gifts.filter(g => g.reserved_by === user?.name)
+
+  const filtered = (activeCategory === 'Todos'
     ? gifts
     : gifts.filter(g => g.category === activeCategory)
-
-  const myReserved = gifts.filter(g => g.reserved_by === user)
+  ).filter(g => !g.reserved_by || g.reserved_by === user?.name)
 
   const handleReserve = async (giftId: string) => {
     const gift = gifts.find(g => g.id === giftId)
-    const ok = await reserve(giftId, user!)
+    const ok = await reserve(giftId, user!.name)
     setConfirming(null)
     if (ok) {
       if (gift?.link) window.open(gift.link, '_blank', 'noopener,noreferrer')
@@ -53,7 +54,7 @@ export default function GiftListPage() {
   }
 
   const handleUnreserve = async (giftId: string) => {
-    const ok = await unreserve(giftId, user!)
+    const ok = await unreserve(giftId, user!.name)
     if (ok) showToast('Reserva cancelada.', 'success')
     else showToast('Não foi possível cancelar. Tente novamente.', 'error')
   }
@@ -71,7 +72,7 @@ export default function GiftListPage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500 hidden sm:block">
-              Olá, <span className="text-gray-700 font-medium">{user}</span>
+              Olá, <span className="text-gray-700 font-medium">{user?.name.split(' ')[0]}</span>
             </span>
             <button
               onClick={logout}
@@ -145,8 +146,8 @@ export default function GiftListPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map(gift => {
-              const isReservedByMe = gift.reserved_by === user
-              const isReservedByOther = gift.reserved_by && gift.reserved_by !== user
+              const isReservedByMe = gift.reserved_by === user?.name
+              const isReservedByOther = gift.reserved_by && gift.reserved_by !== user?.name
               const isConfirming = confirming === gift.id
 
               return (
