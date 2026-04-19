@@ -116,7 +116,7 @@ export default function GiftListPage() {
               <p className="text-xs text-gold-dark opacity-70 leading-relaxed">
                 Precisa cancelar? Manda uma mensagem para os noivos:{' '}
                 <a
-                  href="https://wa.me/5511999999999?text=Oi!%20Preciso%20cancelar%20minha%20reserva%20de%20presente."
+                  href="https://wa.me/5511916190887?text=Oi%20Vini!%20Preciso%20cancelar%20minha%20reserva%20de%20presente."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline font-medium hover:opacity-100"
