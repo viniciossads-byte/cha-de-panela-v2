@@ -18,7 +18,12 @@ export default function LoginPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Insira um e-mail válido.'); return }
     if (phone.replace(/\D/g, '').length < 10) { setError('Insira um telefone válido com DDD.'); return }
     setLoading(true)
-    await login({ name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim() })
+    const result = await login({ name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim() })
+    setLoading(false)
+    if (result === 'phone_mismatch') {
+      setError('Este e-mail já foi cadastrado com um telefone diferente. Verifique os dados ou fale com os noivos.')
+      return
+    }
     navigate('/')
   }
 
@@ -83,7 +88,7 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {error && <p className="text-xs text-red-500 leading-relaxed">{error}</p>}
 
             <button
               type="submit"

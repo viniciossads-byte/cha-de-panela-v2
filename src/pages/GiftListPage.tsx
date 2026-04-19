@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useGifts } from '@/hooks/useGifts'
 import { CATEGORIES, Category } from '@/lib/gifts'
-import { Heart, LogOut, Check, Lock, X } from 'lucide-react'
+import { Heart, LogOut, Check, X } from 'lucide-react'
 
 const WEDDING_DATE = new Date('2026-06-07T00:00:00')
 
@@ -104,23 +104,26 @@ export default function GiftListPage() {
         {myReserved.length > 0 && (
           <div className="bg-gold-light border border-gold rounded-2xl p-4 mb-8 flex items-start gap-3">
             <Check className="h-5 w-5 text-gold-dark mt-0.5 shrink-0" />
-            <div>
+            <div className="flex-1">
               <p className="text-sm font-medium text-gold-dark mb-1">
                 Você escolheu {myReserved.length} presente{myReserved.length > 1 ? 's' : ''}:
               </p>
-              <ul className="text-sm text-gold-dark space-y-0.5">
+              <ul className="text-sm text-gold-dark space-y-0.5 mb-2">
                 {myReserved.map(g => (
-                  <li key={g.id} className="flex items-center gap-2">
-                    <span>• {g.name}</span>
-                    <button
-                      onClick={() => handleUnreserve(g.id)}
-                      className="text-xs underline opacity-60 hover:opacity-100"
-                    >
-                      cancelar
-                    </button>
-                  </li>
+                  <li key={g.id}>• {g.name}</li>
                 ))}
               </ul>
+              <p className="text-xs text-gold-dark opacity-70 leading-relaxed">
+                Precisa cancelar? Manda uma mensagem para os noivos:{' '}
+                <a
+                  href="https://wa.me/5511999999999?text=Oi!%20Preciso%20cancelar%20minha%20reserva%20de%20presente."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-medium hover:opacity-100"
+                >
+                  falar pelo WhatsApp
+                </a>
+              </p>
             </div>
           </div>
         )}
@@ -151,16 +154,13 @@ export default function GiftListPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map(gift => {
               const isReservedByMe = gift.reserved_by === user?.name
-              const isReservedByOther = gift.reserved_by && gift.reserved_by !== user?.name
               const isConfirming = confirming === gift.id
 
               return (
                 <div
                   key={gift.id}
                   className={`bg-white rounded-2xl overflow-hidden border transition-all duration-200 ${
-                    isReservedByOther
-                      ? 'border-gray-100 opacity-60'
-                      : isReservedByMe
+                    isReservedByMe
                       ? 'border-gold shadow-md'
                       : 'border-gray-100 hover:shadow-md hover:border-gold-light'
                   }`}
@@ -172,14 +172,6 @@ export default function GiftListPage() {
                       alt={gift.name}
                       className="w-full h-full object-cover"
                     />
-                    {isReservedByOther && (
-                      <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                        <div className="bg-white rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
-                          <Lock className="h-3 w-3 text-gray-400" />
-                          <span className="text-xs text-gray-500">Reservado</span>
-                        </div>
-                      </div>
-                    )}
                     {isReservedByMe && (
                       <div className="absolute top-3 right-3 bg-gold rounded-full p-1.5 shadow">
                         <Check className="h-3.5 w-3.5 text-white" />
@@ -215,8 +207,6 @@ export default function GiftListPage() {
                         <span className="text-xs text-gold font-medium flex items-center gap-1">
                           <Check className="h-3 w-3" /> Escolhido por você
                         </span>
-                      ) : isReservedByOther ? (
-                        <span className="text-xs text-gray-400">Já reservado</span>
                       ) : isConfirming ? (
                         <div className="flex items-center gap-2">
                           <button

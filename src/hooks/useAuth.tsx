@@ -10,7 +10,7 @@ export interface Guest {
 interface AuthContextType {
   user: Guest | null
   loading: boolean
-  login: (guest: Guest) => Promise<void>
+  login: (guest: Guest) => Promise<'ok' | 'phone_mismatch'>
   logout: () => void
 }
 
@@ -29,15 +29,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [])
 
-  const login = async (guest: Guest) => {
+  const login = async (guest: Guest): Promise<'ok' | 'phone_mismatch'> => {
+    if (supabase) {
+      // Check if this email is already registered
+      const { data: existing } = await supabase
+        .from('guests')
+        .select('name, phone')
+        .eq('email', guest.email)
+        .single()
+
+      if (existing) {
+        // Validate phone matches
+        const normalize = (p: string) => p.replace(/\D/g, '')
+        if (normalize(existing.phone) !== normalize(guest.phone)) {
+          return 'phone_mismatch'
+        }
+        // Use the original stored name so reservations stay linked
+        guest = { ...guest, name: existing.name }
+      } else {
+        // First time — save to Supabase
+        await supabase.from('guests').insert({
+          name: guest.name,
+          email: guest.email,
+          phone: guest.phone,
+        })
+      }
+    }
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(guest))
     setUser(guest)
-    if (supabase) {
-      await supabase.from('guests').upsert(
-        { name: guest.name, email: guest.email, phone: guest.phone },
-        { onConflict: 'email' }
-      )
-    }
+    return 'ok'
   }
 
   const logout = () => {

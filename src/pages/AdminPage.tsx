@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { GIFTS } from '@/lib/gifts'
-import { Lock, Download, LogOut } from 'lucide-react'
+import { Lock, Download, LogOut, Trash2 } from 'lucide-react'
 
 const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASSWORD || 'admin2026'
 
@@ -19,6 +19,7 @@ export default function AdminPage() {
   const [passError, setPassError] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
+  const [cancelling, setCancelling] = useState<string | null>(null)
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,6 +44,14 @@ export default function AdminPage() {
       setLoading(false)
     })
   }, [authed])
+
+  const cancelReservation = async (giftId: string) => {
+    if (!supabase) return
+    setCancelling(giftId)
+    await supabase.from('reservations').delete().eq('gift_id', giftId)
+    setRows(prev => prev.filter(r => r.gift_id !== giftId))
+    setCancelling(null)
+  }
 
   const downloadCSV = () => {
     const header = 'Presente,Preço,Nome,E-mail,Telefone,Data\n'
@@ -138,7 +147,7 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-cream border-b border-gold-light">
                 <tr>
-                  {['Presente', 'Preço', 'Nome', 'E-mail', 'Telefone', 'Data'].map(h => (
+                  {['Presente', 'Preço', 'Nome', 'E-mail', 'Telefone', 'Data', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       {h}
                     </th>
@@ -157,6 +166,17 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-gray-500">{r.phone}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">
                         {new Date(r.created_at).toLocaleString('pt-BR')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => cancelReservation(r.gift_id)}
+                          disabled={cancelling === r.gift_id}
+                          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
+                          title="Cancelar reserva"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {cancelling === r.gift_id ? '...' : 'Cancelar'}
+                        </button>
                       </td>
                     </tr>
                   )
