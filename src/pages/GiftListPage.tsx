@@ -264,7 +264,10 @@ export default function GiftListPage() {
             <h3 className="font-display text-2xl font-semibold text-gray-800 mb-1">
               Vini & Victoria
             </h3>
-            <p className="text-sm text-gray-400 mb-6">7 de junho de 2026</p>
+            <p className="text-sm text-gray-400 mb-2">7 de junho de 2026</p>
+            <p className="text-sm text-gray-500 leading-relaxed mb-6 max-w-xs mx-auto">
+              Você foi escolhido com muito carinho para compartilhar esse momento único conosco.
+            </p>
 
             {countdown.passed ? (
               <p className="font-display text-xl text-gold font-semibold">Hoje é o grande dia! 🎉</p>
