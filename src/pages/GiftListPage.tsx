@@ -1,8 +1,24 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useGifts } from '@/hooks/useGifts'
 import { CATEGORIES, Category } from '@/lib/gifts'
-import { Heart, LogOut, Check, Lock, ChevronDown } from 'lucide-react'
+import { Heart, LogOut, Check, Lock, X } from 'lucide-react'
+
+const WEDDING_DATE = new Date('2026-06-07T00:00:00')
+
+function useCountdown() {
+  const [diff, setDiff] = useState(() => WEDDING_DATE.getTime() - Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setDiff(WEDDING_DATE.getTime() - Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const total = Math.max(0, diff)
+  const days = Math.floor(total / 86400000)
+  const hours = Math.floor((total % 86400000) / 3600000)
+  const minutes = Math.floor((total % 3600000) / 60000)
+  const seconds = Math.floor((total % 60000) / 1000)
+  return { days, hours, minutes, seconds, passed: diff <= 0 }
+}
 
 export default function GiftListPage() {
   const { user, logout } = useAuth()
@@ -10,10 +26,12 @@ export default function GiftListPage() {
   const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos')
   const [confirming, setConfirming] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [showCountdown, setShowCountdown] = useState(true)
+  const countdown = useCountdown()
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setTimeout(() => setToast(null), 5000)
   }
 
   const filtered = activeCategory === 'Todos'
@@ -23,10 +41,15 @@ export default function GiftListPage() {
   const myReserved = gifts.filter(g => g.reserved_by === user)
 
   const handleReserve = async (giftId: string) => {
+    const gift = gifts.find(g => g.id === giftId)
     const ok = await reserve(giftId, user!)
     setConfirming(null)
-    if (ok) showToast('Presente escolhido com sucesso! 🎁', 'success')
-    else showToast('Ops, alguém acabou de reservar esse presente.', 'error')
+    if (ok) {
+      if (gift?.link) window.open(gift.link, '_blank', 'noopener,noreferrer')
+      showToast('Presente escolhido! Abrimos o link como sugestão — você pode comprar onde preferir. 🎁', 'success')
+    } else {
+      showToast('Ops, alguém acabou de reservar esse presente.', 'error')
+    }
   }
 
   const handleUnreserve = async (giftId: string) => {
@@ -226,6 +249,52 @@ export default function GiftListPage() {
           </div>
         )}
       </main>
+
+      {/* Countdown popup */}
+      {showCountdown && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 relative text-center">
+            <button
+              onClick={() => setShowCountdown(false)}
+              className="absolute top-4 right-4 text-gray-300 hover:text-gray-500 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <Heart className="h-8 w-8 text-gold fill-gold mx-auto mb-4" />
+            <h3 className="font-display text-2xl font-semibold text-gray-800 mb-1">
+              Vini & Victoria
+            </h3>
+            <p className="text-sm text-gray-400 mb-6">7 de junho de 2026</p>
+
+            {countdown.passed ? (
+              <p className="font-display text-xl text-gold font-semibold">Hoje é o grande dia! 🎉</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { value: countdown.days, label: 'dias' },
+                  { value: countdown.hours, label: 'horas' },
+                  { value: countdown.minutes, label: 'min' },
+                  { value: countdown.seconds, label: 'seg' },
+                ].map(({ value, label }) => (
+                  <div key={label} className="flex flex-col items-center bg-cream rounded-xl py-3">
+                    <span className="font-display text-3xl font-semibold text-gray-800 leading-none">
+                      {String(value).padStart(2, '0')}
+                    </span>
+                    <span className="text-xs text-gray-400 mt-1">{label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowCountdown(false)}
+              className="mt-6 w-full bg-gold hover:bg-gold-dark text-white font-medium py-3 rounded-xl transition-colors text-sm"
+            >
+              Ver lista de presentes
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
