@@ -166,11 +166,23 @@ export default function GiftListPage() {
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-800 mb-1">{gift.name}</h3>
                     <p className="text-xs text-gray-400 mb-3 leading-relaxed">{gift.description}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="font-display text-lg text-gold font-semibold">
-                        R$ {gift.price.toFixed(2).replace('.', ',')}
-                      </span>
 
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-display text-lg text-gold font-semibold">
+                        {gift.price}
+                      </span>
+                      <a
+                        href={gift.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-gray-400 hover:text-gold underline underline-offset-2 transition-colors"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        Ver produto →
+                      </a>
+                    </div>
+
+                    <div className="flex items-center justify-end">
                       {isReservedByMe ? (
                         <span className="text-xs text-gold font-medium flex items-center gap-1">
                           <Check className="h-3 w-3" /> Escolhido por você
@@ -197,7 +209,7 @@ export default function GiftListPage() {
                           onClick={() => setConfirming(gift.id)}
                           className="text-xs bg-gray-800 hover:bg-gold text-white px-4 py-2 rounded-lg transition-colors duration-200"
                         >
-                          Escolher
+                          Escolher presente
                         </button>
                       )}
                     </div>
