@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { GIFTS } from '@/lib/gifts'
-import { Lock, Download, LogOut, Trash2 } from 'lucide-react'
+import { Lock, Download, LogOut, Trash2, UserPlus } from 'lucide-react'
 
 const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASSWORD || 'admin2026'
 
@@ -21,28 +21,39 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [cancelling, setCancelling] = useState<string | null>(null)
 
+  // Manual assignment state
+  const [assignGiftId, setAssignGiftId] = useState('')
+  const [assignGuestName, setAssignGuestName] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [assignSuccess, setAssignSuccess] = useState(false)
+  const [assignError, setAssignError] = useState('')
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     if (pass === ADMIN_PASS) { setAuthed(true) } else { setPassError(true) }
   }
 
-  useEffect(() => {
-    if (!authed || !supabase) return
+  const loadData = async () => {
+    if (!supabase) return
     setLoading(true)
-    Promise.all([
+    const [resv, guests] = await Promise.all([
       supabase.from('reservations').select('gift_id, guest_name, created_at').order('created_at'),
       supabase.from('guests').select('name, email, phone'),
-    ]).then(([resv, guests]) => {
-      const guestMap: Record<string, { email: string; phone: string }> = {}
-      guests.data?.forEach(g => { guestMap[g.name] = { email: g.email, phone: g.phone } })
-      const merged = (resv.data || []).map(r => ({
-        ...r,
-        email: guestMap[r.guest_name]?.email || '—',
-        phone: guestMap[r.guest_name]?.phone || '—',
-      }))
-      setRows(merged)
-      setLoading(false)
-    })
+    ])
+    const guestMap: Record<string, { email: string; phone: string }> = {}
+    guests.data?.forEach(g => { guestMap[g.name] = { email: g.email, phone: g.phone } })
+    const merged = (resv.data || []).map(r => ({
+      ...r,
+      email: guestMap[r.guest_name]?.email || '—',
+      phone: guestMap[r.guest_name]?.phone || '—',
+    }))
+    setRows(merged)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (!authed) return
+    loadData()
   }, [authed])
 
   const cancelReservation = async (giftId: string) => {
@@ -51,6 +62,30 @@ export default function AdminPage() {
     await supabase.from('reservations').delete().eq('gift_id', giftId)
     setRows(prev => prev.filter(r => r.gift_id !== giftId))
     setCancelling(null)
+  }
+
+  const assignGift = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!supabase || !assignGiftId || !assignGuestName.trim()) return
+    setAssigning(true)
+    setAssignError('')
+    setAssignSuccess(false)
+
+    const { error } = await supabase.from('reservations').insert({
+      gift_id: assignGiftId,
+      guest_name: assignGuestName.trim(),
+    })
+
+    if (error) {
+      setAssignError('Erro ao registrar. Talvez este presente já esteja reservado.')
+    } else {
+      setAssignSuccess(true)
+      setAssignGiftId('')
+      setAssignGuestName('')
+      await loadData()
+      setTimeout(() => setAssignSuccess(false), 3000)
+    }
+    setAssigning(false)
   }
 
   const downloadCSV = () => {
@@ -93,6 +128,8 @@ export default function AdminPage() {
     )
   }
 
+  const reservedIds = new Set(rows.map(r => r.gift_id))
+  const availableGifts = GIFTS.filter(g => !reservedIds.has(g.id))
   const totalReserved = rows.length
   const totalGifts = GIFTS.length
 
@@ -122,8 +159,10 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-3 gap-4 mb-8">
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
           {[
             { label: 'Total de presentes', value: totalGifts },
             { label: 'Presentes escolhidos', value: totalReserved },
@@ -136,6 +175,56 @@ export default function AdminPage() {
           ))}
         </div>
 
+        {/* Manual Assignment */}
+        <div className="bg-white rounded-2xl border border-gold-light overflow-hidden">
+          <div className="px-5 py-4 border-b border-gold-light flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-gold" />
+            <h2 className="font-display text-lg font-semibold text-gray-800">Registrar presente manualmente</h2>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-gray-500 mb-4">
+              Para convidados que não conseguem usar o app — selecione o presente e informe o nome.
+            </p>
+            <form onSubmit={assignGift} className="flex flex-col sm:flex-row gap-3">
+              <select
+                value={assignGiftId}
+                onChange={e => { setAssignGiftId(e.target.value); setAssignError('') }}
+                required
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gold text-gray-800 text-sm bg-white"
+              >
+                <option value="">Selecione o presente…</option>
+                {availableGifts.map(g => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} — {g.price}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={assignGuestName}
+                onChange={e => { setAssignGuestName(e.target.value); setAssignError('') }}
+                placeholder="Nome do convidado"
+                required
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gold text-gray-800 text-sm placeholder-gray-300"
+              />
+              <button
+                type="submit"
+                disabled={assigning || !assignGiftId || !assignGuestName.trim()}
+                className="px-6 py-2.5 bg-gold hover:bg-gold-dark text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {assigning ? 'Salvando…' : 'Confirmar'}
+              </button>
+            </form>
+            {assignSuccess && (
+              <p className="mt-3 text-sm text-green-600 font-medium">✓ Presente registrado com sucesso!</p>
+            )}
+            {assignError && (
+              <p className="mt-3 text-sm text-red-500">{assignError}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Reservations table */}
         {loading ? (
           <div className="flex justify-center py-20">
             <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
@@ -144,6 +233,9 @@ export default function AdminPage() {
           <p className="text-center text-gray-400 py-20">Nenhum presente escolhido ainda.</p>
         ) : (
           <div className="bg-white rounded-2xl border border-gold-light overflow-hidden">
+            <div className="px-5 py-4 border-b border-gold-light">
+              <h2 className="font-display text-lg font-semibold text-gray-800">Reservas</h2>
+            </div>
             <table className="w-full text-sm">
               <thead className="bg-cream border-b border-gold-light">
                 <tr>
