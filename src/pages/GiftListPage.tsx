@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useGifts } from '@/hooks/useGifts'
 import { GIFTS, CATEGORIES, Category } from '@/lib/gifts'
-import { Heart, LogOut, Check, X, Search } from 'lucide-react'
+import { Heart, LogOut, Check, X, Search, Share2, ChevronUp } from 'lucide-react'
 
 const WEDDING_DATE = new Date('2026-06-07T00:00:00')
+const SITE_URL = 'https://chadepanelav2.netlify.app'
 
 function useCountdown() {
   const [diff, setDiff] = useState(() => WEDDING_DATE.getTime() - Date.now())
@@ -21,20 +22,13 @@ function useCountdown() {
 }
 
 type PriceRange = 'todos' | 'ate50' | '50a150' | 'acima150'
-
 const PRICE_LABELS: Record<PriceRange, string> = {
-  todos:     'Qualquer preço',
-  ate50:     'Até R$ 50',
-  '50a150':  'R$ 50 – 150',
-  acima150:  'Acima de R$ 150',
+  todos: 'Qualquer preço', ate50: 'Até R$ 50', '50a150': 'R$ 50 – 150', acima150: 'Acima de R$ 150',
 }
-
 function parsePriceValue(price: string): number {
   const m = price.match(/\d[\d.,]*/)
-  if (!m) return 0
-  return parseFloat(m[0].replace(/\./g, '').replace(',', '.'))
+  return m ? parseFloat(m[0].replace(/\./g, '').replace(',', '.')) : 0
 }
-
 function matchesPrice(price: string, range: PriceRange): boolean {
   if (range === 'todos') return true
   const v = parsePriceValue(price)
@@ -44,37 +38,65 @@ function matchesPrice(price: string, range: PriceRange): boolean {
   return true
 }
 
+// Simple confetti burst
+function ConfettiBurst({ active }: { active: boolean }) {
+  if (!active) return null
+  const pieces = ['🎉','🥂','💛','✨','🎊','💍','🤍','🌸']
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {Array.from({ length: 18 }).map((_, i) => (
+        <span
+          key={i}
+          className="absolute text-2xl animate-confetti"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: '-2rem',
+            animationDelay: `${Math.random() * 0.5}s`,
+            animationDuration: `${1.2 + Math.random() * 0.8}s`,
+          }}
+        >
+          {pieces[i % pieces.length]}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function GiftListPage() {
   const { user, logout } = useAuth()
   const { gifts, loading, reserve, unreserve } = useGifts()
   const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos')
   const [priceRange, setPriceRange]         = useState<PriceRange>('todos')
   const [search, setSearch]                 = useState('')
-  const [confirming, setConfirming]         = useState<string | null>(null)
+  const [confirmingGift, setConfirmingGift] = useState<typeof gifts[0] | null>(null)
   const [toast, setToast]                   = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [showCountdown, setShowCountdown]   = useState(true)
+  const [confetti, setConfetti]             = useState(false)
+  const [showScrollTop, setShowScrollTop]   = useState(false)
   const bannerRef = useRef<HTMLDivElement>(null)
   const countdown = useCountdown()
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 400)
+    window.addEventListener('scroll', onScroll)
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 5000)
   }
 
-  // Stats
-  const totalGifts     = GIFTS.length
-  const reservedCount  = gifts.filter(g => g.reserved_by).length
-  const progressPct    = Math.round((reservedCount / totalGifts) * 100)
+  const totalGifts    = GIFTS.length
+  const reservedCount = gifts.filter(g => g.reserved_by).length
+  const progressPct   = Math.round((reservedCount / totalGifts) * 100)
+  const myReserved    = gifts.filter(g => g.reserved_by === user?.name)
 
-  const myReserved = gifts.filter(g => g.reserved_by === user?.name)
-
-  // Available count per category (excluding reserved-by-others)
   const availableIn = (cat: Category | 'Todos') => {
     const base = cat === 'Todos' ? gifts : gifts.filter(g => g.category === cat)
     return base.filter(g => !g.reserved_by || g.reserved_by === user?.name).length
   }
 
-  // Master filtered list
   const filtered = gifts
     .filter(g => !g.reserved_by || g.reserved_by === user?.name)
     .filter(g => activeCategory === 'Todos' || g.category === activeCategory)
@@ -82,15 +104,18 @@ export default function GiftListPage() {
     .filter(g => g.name.toLowerCase().includes(search.toLowerCase()) ||
                  g.description.toLowerCase().includes(search.toLowerCase()))
 
-  const handleReserve = async (giftId: string) => {
-    const gift = gifts.find(g => g.id === giftId)
-    const newTab = gift?.link ? window.open('', '_blank') : null
-    const ok = await reserve(giftId, user!.name)
-    setConfirming(null)
+  const handleReserve = async () => {
+    if (!confirmingGift) return
+    const gift = confirmingGift
+    const newTab = gift.link ? window.open('', '_blank') : null
+    setConfirmingGift(null)
+    const ok = await reserve(gift.id, user!.name)
     if (ok) {
-      if (newTab && gift?.link) newTab.location.href = gift.link
+      if (newTab && gift.link) newTab.location.href = gift.link
       else newTab?.close()
-      showToast('Presente escolhido! Abrimos o link como sugestão — você pode comprar onde preferir. 🎁', 'success')
+      setConfetti(true)
+      setTimeout(() => setConfetti(false), 2000)
+      showToast('Presente escolhido! Abrimos o link como sugestão 🎁', 'success')
       setTimeout(() => bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)
     } else {
       newTab?.close()
@@ -99,13 +124,32 @@ export default function GiftListPage() {
   }
 
   const handleUnreserve = async (giftId: string) => {
-    const ok = await unreserve(giftId, user!.name)
-    if (ok) showToast('Reserva cancelada.', 'success')
-    else showToast('Não foi possível cancelar. Tente novamente.', 'error')
+    await unreserve(giftId, user!.name)
+  }
+
+  // Build WhatsApp share text
+  const shareOnWhatsApp = () => {
+    const CATEGORY_EMOJI: Record<string, string> = { Cozinha: '🍳', Banheiro: '🚿', Lavanderia: '🧺' }
+    let text = `🎁 *Lista de Presentes – Vini & Victoria*\n📅 7 de junho de 2026\n\n`
+    for (const cat of CATEGORIES) {
+      const catGifts = GIFTS.filter(g => g.category === cat)
+      text += `*${CATEGORY_EMOJI[cat] ?? ''} ${cat}*\n`
+      for (const g of catGifts) {
+        const isReserved = gifts.find(r => r.id === g.id)?.reserved_by
+        const line = `${g.name} – ${g.price}`
+        text += isReserved ? `• ~${line}~ ✅\n` : `• ${line}\n`
+      }
+      text += '\n'
+    }
+    text += `🔗 Acesse e escolha o seu: ${SITE_URL}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   return (
     <div className="min-h-screen bg-cream">
+      {/* Confetti */}
+      <ConfettiBurst active={confetti} />
+
       {/* Header */}
       <header className="bg-white border-b border-gold-light sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -117,6 +161,14 @@ export default function GiftListPage() {
             <span className="text-sm text-gray-500 hidden sm:block">
               Olá, <span className="text-gray-700 font-medium">{user?.name.split(' ')[0]}</span>
             </span>
+            <button
+              onClick={shareOnWhatsApp}
+              className="flex items-center gap-1.5 text-xs text-green-600 hover:text-green-700 font-medium transition-colors"
+              title="Compartilhar lista"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Compartilhar</span>
+            </button>
             <button
               onClick={logout}
               className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
@@ -177,15 +229,13 @@ export default function GiftListPage() {
                   href="https://wa.me/5511916190887?text=Oi%20Vini!%20Preciso%20cancelar%20minha%20reserva%20de%20presente."
                   target="_blank" rel="noopener noreferrer"
                   className="underline font-medium hover:opacity-100"
-                >
-                  WhatsApp
-                </a>
+                >WhatsApp</a>
               </p>
             </div>
           </div>
         )}
 
-        {/* Search bar */}
+        {/* Search */}
         <div className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
           <input
@@ -196,18 +246,14 @@ export default function GiftListPage() {
             className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent text-sm text-gray-700 placeholder-gray-300 transition"
           />
           {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
-            >
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        {/* Category + price filters */}
+        {/* Filters row */}
         <div className="flex flex-col sm:flex-row gap-3 mb-8">
-          {/* Category tabs */}
           <div className="flex gap-2 overflow-x-auto pb-1 flex-1 scrollbar-hide">
             {(['Todos', ...CATEGORIES] as const).map(cat => {
               const count = availableIn(cat)
@@ -224,15 +270,11 @@ export default function GiftListPage() {
                   {cat}
                   <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                     activeCategory === cat ? 'bg-white/25 text-white' : 'bg-cream text-gray-400'
-                  }`}>
-                    {count}
-                  </span>
+                  }`}>{count}</span>
                 </button>
               )
             })}
           </div>
-
-          {/* Price filter */}
           <select
             value={priceRange}
             onChange={e => setPriceRange(e.target.value as PriceRange)}
@@ -262,19 +304,15 @@ export default function GiftListPage() {
           <div className="text-center py-24">
             <p className="text-4xl mb-3">🎁</p>
             <p className="font-display text-xl text-gray-500 mb-1">
-              {search
-                ? `Nenhum resultado para "${search}"`
-                : reservedCount === totalGifts
-                ? 'Todos os presentes foram escolhidos!'
-                : 'Nenhum presente nessa combinação.'}
+              {search ? `Nenhum resultado para "${search}"` : 'Nenhum presente nessa combinação.'}
             </p>
-            <p className="text-sm text-gray-400">
-              {search ? 'Tente outro termo de busca.' : 'Experimente mudar o filtro ou a categoria.'}
+            <p className="text-sm text-gray-400 mb-4">
+              {search ? 'Tente outro termo.' : 'Experimente mudar o filtro ou a categoria.'}
             </p>
             {(search || activeCategory !== 'Todos' || priceRange !== 'todos') && (
               <button
                 onClick={() => { setSearch(''); setActiveCategory('Todos'); setPriceRange('todos') }}
-                className="mt-4 text-sm text-gold underline hover:text-gold-dark"
+                className="text-sm text-gold underline hover:text-gold-dark"
               >
                 Limpar filtros
               </button>
@@ -284,27 +322,17 @@ export default function GiftListPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map(gift => {
               const isReservedByMe = gift.reserved_by === user?.name
-              const isConfirming   = confirming === gift.id
-
               return (
                 <div
                   key={gift.id}
                   className={`bg-white rounded-2xl overflow-hidden border transition-all duration-200 ${
-                    isConfirming
-                      ? 'border-gold shadow-lg scale-[1.01]'
-                      : isReservedByMe
+                    isReservedByMe
                       ? 'border-gold shadow-md'
                       : 'border-gray-100 hover:shadow-md hover:border-gold-light'
                   }`}
                 >
-                  {/* Image */}
                   <div className="relative h-44 overflow-hidden">
-                    <img
-                      src={gift.image}
-                      alt={gift.name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
+                    <img src={gift.image} alt={gift.name} className="w-full h-full object-cover" loading="lazy" />
                     {isReservedByMe && (
                       <div className="absolute top-3 right-3 bg-gold rounded-full p-1.5 shadow">
                         <Check className="h-3.5 w-3.5 text-white" />
@@ -314,12 +342,9 @@ export default function GiftListPage() {
                       {gift.category}
                     </span>
                   </div>
-
-                  {/* Content */}
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-800 mb-1">{gift.name}</h3>
                     <p className="text-xs text-gray-400 mb-3 leading-relaxed">{gift.description}</p>
-
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-display text-lg text-gold font-semibold">{gift.price}</span>
                       <a
@@ -332,39 +357,18 @@ export default function GiftListPage() {
                         Ver produto →
                       </a>
                     </div>
-
-                    <div className="flex items-center justify-end">
-                      {isReservedByMe ? (
-                        <span className="text-xs text-gold font-medium flex items-center gap-1">
-                          <Check className="h-3 w-3" /> Escolhido por você
-                        </span>
-                      ) : isConfirming ? (
-                        <div className="flex items-center gap-2 w-full justify-between">
-                          <p className="text-xs text-gray-500">Confirmar escolha?</p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setConfirming(null)}
-                              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 rounded-lg border border-gray-200"
-                            >
-                              Não
-                            </button>
-                            <button
-                              onClick={() => handleReserve(gift.id)}
-                              className="text-xs bg-gold text-white px-3 py-1.5 rounded-lg hover:bg-gold-dark transition-colors font-medium"
-                            >
-                              Sim, quero!
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirming(gift.id)}
-                          className="w-full text-sm bg-gray-800 hover:bg-gold text-white py-2.5 rounded-xl transition-colors duration-200 font-medium"
-                        >
-                          Escolher presente
-                        </button>
-                      )}
-                    </div>
+                    {isReservedByMe ? (
+                      <span className="text-xs text-gold font-medium flex items-center gap-1">
+                        <Check className="h-3 w-3" /> Escolhido por você
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingGift(gift)}
+                        className="w-full text-sm bg-gray-800 hover:bg-gold text-white py-2.5 rounded-xl transition-colors duration-200 font-medium"
+                      >
+                        Escolher presente
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -373,14 +377,52 @@ export default function GiftListPage() {
         )}
       </main>
 
+      {/* Confirmation Modal */}
+      {confirmingGift && (
+        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="h-48 relative">
+              <img src={confirmingGift.image} alt={confirmingGift.name} className="w-full h-full object-cover" />
+              <button
+                onClick={() => setConfirmingGift(null)}
+                className="absolute top-3 right-3 bg-white/80 rounded-full p-1.5 text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{confirmingGift.category}</p>
+              <h3 className="font-display text-xl font-semibold text-gray-800 mb-1">{confirmingGift.name}</h3>
+              <p className="text-sm text-gray-400 mb-4">{confirmingGift.description}</p>
+              <p className="font-display text-2xl text-gold font-semibold mb-6">{confirmingGift.price}</p>
+              <p className="text-xs text-gray-400 text-center mb-4 leading-relaxed">
+                Ao confirmar, abriremos o link do produto como sugestão.<br/>
+                Você pode comprar onde preferir e levar no dia. 🎁
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmingGift(null)}
+                  className="flex-1 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 hover:border-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleReserve}
+                  className="flex-1 py-3 rounded-xl bg-gold hover:bg-gold-dark text-white text-sm font-medium transition-colors"
+                >
+                  Sim, quero este! 🎉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Countdown popup */}
       {showCountdown && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 relative text-center">
-            <button
-              onClick={() => setShowCountdown(false)}
-              className="absolute top-4 right-4 text-gray-300 hover:text-gray-500 transition-colors"
-            >
+            <button onClick={() => setShowCountdown(false)} className="absolute top-4 right-4 text-gray-300 hover:text-gray-500 transition-colors">
               <X className="h-5 w-5" />
             </button>
             <Heart className="h-8 w-8 text-gold fill-gold mx-auto mb-4" />
@@ -394,8 +436,8 @@ export default function GiftListPage() {
             ) : (
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { value: countdown.days,    label: 'dias' },
-                  { value: countdown.hours,   label: 'horas' },
+                  { value: countdown.days, label: 'dias' },
+                  { value: countdown.hours, label: 'horas' },
                   { value: countdown.minutes, label: 'min' },
                   { value: countdown.seconds, label: 'seg' },
                 ].map(({ value, label }) => (
@@ -416,6 +458,16 @@ export default function GiftListPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Scroll to top */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-4 bg-white border border-gold-light shadow-lg rounded-full p-3 text-gold hover:bg-gold hover:text-white transition-all duration-200 z-30"
+        >
+          <ChevronUp className="h-5 w-5" />
+        </button>
       )}
 
       {/* Toast */}
