@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { GIFTS } from '@/lib/gifts'
-import { Lock, Download, LogOut, Trash2, UserPlus } from 'lucide-react'
+import { Lock, Download, LogOut, Trash2, UserPlus, ChevronUp, ChevronDown } from 'lucide-react'
 
 const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASSWORD || 'admin2026'
 
@@ -13,27 +13,43 @@ interface Row {
   phone?: string
 }
 
-export default function AdminPage() {
-  const [authed, setAuthed] = useState(false)
-  const [pass, setPass] = useState('')
-  const [passError, setPassError] = useState(false)
-  const [rows, setRows] = useState<Row[]>([])
-  const [loading, setLoading] = useState(false)
-  const [cancelling, setCancelling] = useState<string | null>(null)
+type SortCol = 'gift' | 'price' | 'guest' | 'date'
+type SortDir = 'asc' | 'desc'
 
-  // Manual assignment state
-  const [assignGiftId, setAssignGiftId] = useState('')
+function parsePriceValue(price: string): number {
+  const m = price.match(/\d[\d.,]*/)
+  return m ? parseFloat(m[0].replace(/\./g, '').replace(',', '.')) : 0
+}
+
+export default function AdminPage() {
+  const [authed, setAuthed]       = useState(false)
+  const [pass, setPass]           = useState('')
+  const [passError, setPassError] = useState(false)
+  const [rows, setRows]           = useState<Row[]>([])
+  const [loading, setLoading]     = useState(false)
+  const [totalGuests, setTotalGuests] = useState(0)
+
+  // Cancel confirmation
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null)
+  const [cancelling, setCancelling]       = useState<string | null>(null)
+
+  // Sorting
+  const [sortCol, setSortCol] = useState<SortCol>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  // Manual assignment
+  const [assignGiftId, setAssignGiftId]     = useState('')
   const [assignGuestName, setAssignGuestName] = useState('')
-  const [assigning, setAssigning] = useState(false)
-  const [assignSuccess, setAssignSuccess] = useState(false)
-  const [assignError, setAssignError] = useState('')
+  const [assigning, setAssigning]           = useState(false)
+  const [assignSuccess, setAssignSuccess]   = useState(false)
+  const [assignError, setAssignError]       = useState('')
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     if (pass === ADMIN_PASS) { setAuthed(true) } else { setPassError(true) }
   }
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!supabase) return
     setLoading(true)
     const [resv, guests] = await Promise.all([
@@ -48,13 +64,14 @@ export default function AdminPage() {
       phone: guestMap[r.guest_name]?.phone || '—',
     }))
     setRows(merged)
+    setTotalGuests(guests.data?.length ?? 0)
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     if (!authed) return
     loadData()
-  }, [authed])
+  }, [authed, loadData])
 
   const cancelReservation = async (giftId: string) => {
     if (!supabase) return
@@ -62,6 +79,7 @@ export default function AdminPage() {
     await supabase.from('reservations').delete().eq('gift_id', giftId)
     setRows(prev => prev.filter(r => r.gift_id !== giftId))
     setCancelling(null)
+    setConfirmCancel(null)
   }
 
   const assignGift = async (e: React.FormEvent) => {
@@ -70,12 +88,10 @@ export default function AdminPage() {
     setAssigning(true)
     setAssignError('')
     setAssignSuccess(false)
-
     const { error } = await supabase.from('reservations').insert({
       gift_id: assignGiftId,
       guest_name: assignGuestName.trim(),
     })
-
     if (error) {
       setAssignError('Erro ao registrar. Talvez este presente já esteja reservado.')
     } else {
@@ -99,6 +115,22 @@ export default function AdminPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'presentes.csv'; a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const toggleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const SortIcon = ({ col }: { col: SortCol }) => {
+    if (sortCol !== col) return <ChevronUp className="h-3 w-3 opacity-20" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="h-3 w-3 text-gold" />
+      : <ChevronDown className="h-3 w-3 text-gold" />
   }
 
   if (!authed) {
@@ -128,10 +160,26 @@ export default function AdminPage() {
     )
   }
 
-  const reservedIds = new Set(rows.map(r => r.gift_id))
+  const reservedIds   = new Set(rows.map(r => r.gift_id))
   const availableGifts = GIFTS.filter(g => !reservedIds.has(g.id))
   const totalReserved = rows.length
-  const totalGifts = GIFTS.length
+  const totalGifts    = GIFTS.length
+
+  const totalValue = rows.reduce((sum, r) => {
+    const gift = GIFTS.find(g => g.id === r.gift_id)
+    return sum + (gift ? parsePriceValue(gift.price) : 0)
+  }, 0)
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const giftA = GIFTS.find(g => g.id === a.gift_id)
+    const giftB = GIFTS.find(g => g.id === b.gift_id)
+    let cmp = 0
+    if (sortCol === 'gift')  cmp = (giftA?.name || '').localeCompare(giftB?.name || '')
+    if (sortCol === 'price') cmp = parsePriceValue(giftA?.price || '') - parsePriceValue(giftB?.price || '')
+    if (sortCol === 'guest') cmp = a.guest_name.localeCompare(b.guest_name)
+    if (sortCol === 'date')  cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    return sortDir === 'asc' ? cmp : -cmp
+  })
 
   return (
     <div className="min-h-screen bg-cream">
@@ -161,15 +209,21 @@ export default function AdminPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Stats — 5 cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
-            { label: 'Total de presentes', value: totalGifts },
-            { label: 'Presentes escolhidos', value: totalReserved },
-            { label: 'Presentes disponíveis', value: totalGifts - totalReserved },
-          ].map(({ label, value }) => (
+            { label: 'Total de presentes',      value: totalGifts },
+            { label: 'Presentes escolhidos',    value: totalReserved },
+            { label: 'Presentes disponíveis',   value: totalGifts - totalReserved },
+            { label: 'Convidados cadastrados',  value: totalGuests },
+            {
+              label: 'Valor coberto',
+              value: totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+              small: true,
+            },
+          ].map(({ label, value, small }) => (
             <div key={label} className="bg-white rounded-2xl border border-gold-light p-5 text-center">
-              <p className="font-display text-4xl font-semibold text-gold">{value}</p>
+              <p className={`font-display font-semibold text-gold ${small ? 'text-2xl' : 'text-4xl'}`}>{value}</p>
               <p className="text-xs text-gray-500 mt-1">{label}</p>
             </div>
           ))}
@@ -194,9 +248,7 @@ export default function AdminPage() {
               >
                 <option value="">Selecione o presente…</option>
                 {availableGifts.map(g => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} — {g.price}
-                  </option>
+                  <option key={g.id} value={g.id}>{g.name} — {g.price}</option>
                 ))}
               </select>
               <input
@@ -215,12 +267,8 @@ export default function AdminPage() {
                 {assigning ? 'Salvando…' : 'Confirmar'}
               </button>
             </form>
-            {assignSuccess && (
-              <p className="mt-3 text-sm text-green-600 font-medium">✓ Presente registrado com sucesso!</p>
-            )}
-            {assignError && (
-              <p className="mt-3 text-sm text-red-500">{assignError}</p>
-            )}
+            {assignSuccess && <p className="mt-3 text-sm text-green-600 font-medium">✓ Presente registrado com sucesso!</p>}
+            {assignError   && <p className="mt-3 text-sm text-red-500">{assignError}</p>}
           </div>
         </div>
 
@@ -236,45 +284,85 @@ export default function AdminPage() {
             <div className="px-5 py-4 border-b border-gold-light">
               <h2 className="font-display text-lg font-semibold text-gray-800">Reservas</h2>
             </div>
-            <table className="w-full text-sm">
-              <thead className="bg-cream border-b border-gold-light">
-                <tr>
-                  {['Presente', 'Preço', 'Nome', 'E-mail', 'Telefone', 'Data', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {h}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-cream border-b border-gold-light">
+                  <tr>
+                    {([
+                      { key: 'gift',  label: 'Presente' },
+                      { key: 'price', label: 'Preço' },
+                      { key: 'guest', label: 'Nome' },
+                    ] as { key: SortCol; label: string }[]).map(({ key, label }) => (
+                      <th
+                        key={key}
+                        onClick={() => toggleSort(key)}
+                        className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gold select-none"
+                      >
+                        <span className="flex items-center gap-1">
+                          {label} <SortIcon col={key} />
+                        </span>
+                      </th>
+                    ))}
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                    <th
+                      onClick={() => toggleSort('date')}
+                      className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gold select-none"
+                    >
+                      <span className="flex items-center gap-1">Data <SortIcon col="date" /></span>
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {rows.map((r, i) => {
-                  const gift = GIFTS.find(g => g.id === r.gift_id)
-                  return (
-                    <tr key={i} className="hover:bg-cream/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-800">{gift?.name || r.gift_id}</td>
-                      <td className="px-4 py-3 text-gold font-medium">{gift?.price || '—'}</td>
-                      <td className="px-4 py-3 text-gray-700">{r.guest_name}</td>
-                      <td className="px-4 py-3 text-gray-500">{r.email}</td>
-                      <td className="px-4 py-3 text-gray-500">{r.phone}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">
-                        {new Date(r.created_at).toLocaleString('pt-BR')}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => cancelReservation(r.gift_id)}
-                          disabled={cancelling === r.gift_id}
-                          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
-                          title="Cancelar reserva"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {cancelling === r.gift_id ? '...' : 'Cancelar'}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {sortedRows.map((r, i) => {
+                    const gift = GIFTS.find(g => g.id === r.gift_id)
+                    const isConfirming = confirmCancel === r.gift_id
+                    return (
+                      <tr key={i} className="hover:bg-cream/50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-800">{gift?.name || r.gift_id}</td>
+                        <td className="px-4 py-3 text-gold font-medium">{gift?.price || '—'}</td>
+                        <td className="px-4 py-3 text-gray-700">{r.guest_name}</td>
+                        <td className="px-4 py-3 text-gray-500">{r.email}</td>
+                        <td className="px-4 py-3 text-gray-500">{r.phone}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          {new Date(r.created_at).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {isConfirming ? (
+                            <span className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Tem certeza?</span>
+                              <button
+                                onClick={() => cancelReservation(r.gift_id)}
+                                disabled={cancelling === r.gift_id}
+                                className="text-xs text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {cancelling === r.gift_id ? '...' : 'Sim'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmCancel(null)}
+                                className="text-xs text-gray-400 hover:text-gray-600"
+                              >
+                                Não
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmCancel(r.gift_id)}
+                              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors"
+                              title="Cancelar reserva"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Cancelar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>

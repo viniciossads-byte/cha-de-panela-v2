@@ -6,6 +6,7 @@ import { Heart, LogOut, Check, X, Search, Share2, ChevronUp } from 'lucide-react
 
 const WEDDING_DATE = new Date('2026-06-07T00:00:00')
 const SITE_URL = 'https://chadepanelav2.netlify.app'
+const MAX_GIFTS = 3
 
 function useCountdown() {
   const [diff, setDiff] = useState(() => WEDDING_DATE.getTime() - Date.now())
@@ -64,12 +65,12 @@ function ConfettiBurst({ active }: { active: boolean }) {
 
 export default function GiftListPage() {
   const { user, logout } = useAuth()
-  const { gifts, loading, reserve, unreserve } = useGifts()
+  const { gifts, loading, reserve } = useGifts()
   const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos')
   const [priceRange, setPriceRange]         = useState<PriceRange>('todos')
   const [search, setSearch]                 = useState('')
   const [confirmingGift, setConfirmingGift] = useState<typeof gifts[0] | null>(null)
-  const [toast, setToast]                   = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [toast, setToast]                   = useState<{ msg: string; type: 'success' | 'error' | 'warn' } | null>(null)
   const [showCountdown, setShowCountdown]   = useState(true)
   const [confetti, setConfetti]             = useState(false)
   const [showScrollTop, setShowScrollTop]   = useState(false)
@@ -82,7 +83,7 @@ export default function GiftListPage() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const showToast = (msg: string, type: 'success' | 'error') => {
+  const showToast = (msg: string, type: 'success' | 'error' | 'warn') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 5000)
   }
@@ -91,21 +92,41 @@ export default function GiftListPage() {
   const reservedCount = gifts.filter(g => g.reserved_by).length
   const progressPct   = Math.round((reservedCount / totalGifts) * 100)
   const myReserved    = gifts.filter(g => g.reserved_by === user?.name)
+  const atLimit       = myReserved.length >= MAX_GIFTS
 
   const availableIn = (cat: Category | 'Todos') => {
     const base = cat === 'Todos' ? gifts : gifts.filter(g => g.category === cat)
     return base.filter(g => !g.reserved_by || g.reserved_by === user?.name).length
   }
 
-  const filtered = gifts
-    .filter(g => !g.reserved_by || g.reserved_by === user?.name)
-    .filter(g => activeCategory === 'Todos' || g.category === activeCategory)
-    .filter(g => matchesPrice(g.price, priceRange))
-    .filter(g => g.name.toLowerCase().includes(search.toLowerCase()) ||
-                 g.description.toLowerCase().includes(search.toLowerCase()))
+  // Build filtered list, with the user's own reserved gifts pinned to the top
+  const filtered = (() => {
+    const base = gifts
+      .filter(g => !g.reserved_by || g.reserved_by === user?.name)
+      .filter(g => activeCategory === 'Todos' || g.category === activeCategory)
+      .filter(g => matchesPrice(g.price, priceRange))
+      .filter(g => g.name.toLowerCase().includes(search.toLowerCase()) ||
+                   g.description.toLowerCase().includes(search.toLowerCase()))
+    const mine  = base.filter(g => g.reserved_by === user?.name)
+    const rest  = base.filter(g => g.reserved_by !== user?.name)
+    return [...mine, ...rest]
+  })()
+
+  const handleOpenConfirm = (gift: typeof gifts[0]) => {
+    if (atLimit) {
+      showToast(`Você já escolheu ${MAX_GIFTS} presentes — esse é o limite. Para trocar, fale com os noivos.`, 'warn')
+      return
+    }
+    setConfirmingGift(gift)
+  }
 
   const handleReserve = async () => {
     if (!confirmingGift) return
+    if (atLimit) {
+      setConfirmingGift(null)
+      showToast(`Você já atingiu o limite de ${MAX_GIFTS} presentes.`, 'warn')
+      return
+    }
     const gift = confirmingGift
     const newTab = gift.link ? window.open('', '_blank') : null
     setConfirmingGift(null)
@@ -121,10 +142,6 @@ export default function GiftListPage() {
       newTab?.close()
       showToast('Ops, alguém acabou de reservar esse presente.', 'error')
     }
-  }
-
-  const handleUnreserve = async (giftId: string) => {
-    await unreserve(giftId, user!.name)
   }
 
   // Build WhatsApp share text
@@ -218,11 +235,16 @@ export default function GiftListPage() {
             <Check className="h-5 w-5 text-gold-dark mt-0.5 shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-gold-dark mb-1">
-                Você escolheu {myReserved.length} presente{myReserved.length > 1 ? 's' : ''}:
+                Você escolheu {myReserved.length} de {MAX_GIFTS} presente{myReserved.length > 1 ? 's' : ''}:
               </p>
               <ul className="text-sm text-gold-dark space-y-0.5 mb-2">
                 {myReserved.map(g => <li key={g.id}>• {g.name}</li>)}
               </ul>
+              {atLimit && (
+                <p className="text-xs font-semibold text-gold-dark mb-1">
+                  Você atingiu o limite de {MAX_GIFTS} presentes. 🎁
+                </p>
+              )}
               <p className="text-xs text-gold-dark opacity-70 leading-relaxed">
                 Precisa cancelar? Fale com os noivos:{' '}
                 <a
@@ -361,9 +383,16 @@ export default function GiftListPage() {
                       <span className="text-xs text-gold font-medium flex items-center gap-1">
                         <Check className="h-3 w-3" /> Escolhido por você
                       </span>
+                    ) : atLimit ? (
+                      <button
+                        onClick={() => showToast(`Você já escolheu ${MAX_GIFTS} presentes — esse é o limite. Para trocar, fale com os noivos.`, 'warn')}
+                        className="w-full text-sm bg-gray-100 text-gray-400 py-2.5 rounded-xl cursor-not-allowed font-medium"
+                      >
+                        Limite atingido
+                      </button>
                     ) : (
                       <button
-                        onClick={() => setConfirmingGift(gift)}
+                        onClick={() => handleOpenConfirm(gift)}
                         className="w-full text-sm bg-gray-800 hover:bg-gold text-white py-2.5 rounded-xl transition-colors duration-200 font-medium"
                       >
                         Escolher presente
@@ -473,7 +502,9 @@ export default function GiftListPage() {
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-50 max-w-xs text-center transition-all duration-300 ${
-          toast.type === 'success' ? 'bg-gray-800 text-white' : 'bg-red-500 text-white'
+          toast.type === 'success' ? 'bg-gray-800 text-white'
+          : toast.type === 'warn'  ? 'bg-amber-500 text-white'
+          : 'bg-red-500 text-white'
         }`}>
           {toast.msg}
         </div>
