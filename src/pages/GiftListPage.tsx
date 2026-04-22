@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useGifts } from '@/hooks/useGifts'
 import { GIFTS, CATEGORIES, Category } from '@/lib/gifts'
-import { Heart, LogOut, Check, X, Search, Share2, ChevronUp } from 'lucide-react'
+import { Heart, LogOut, Check, X, Search, Share2, ChevronUp, ChevronDown, ShoppingBag } from 'lucide-react'
 
 const WEDDING_DATE = new Date('2026-06-07T00:00:00')
 const SITE_URL = 'https://chadepanelav2.netlify.app'
@@ -69,8 +69,9 @@ export default function GiftListPage() {
   const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos')
   const [priceRange, setPriceRange]         = useState<PriceRange>('todos')
   const [search, setSearch]                 = useState('')
-  const [confirmingGift, setConfirmingGift] = useState<typeof gifts[0] | null>(null)
-  const [toast, setToast]                   = useState<{ msg: string; type: 'success' | 'error' | 'warn' } | null>(null)
+  const [confirmingGift, setConfirmingGift]   = useState<typeof gifts[0] | null>(null)
+  const [expandedOptions, setExpandedOptions] = useState<string | null>(null)
+  const [toast, setToast]                     = useState<{ msg: string; type: 'success' | 'error' | 'warn' } | null>(null)
   const [showCountdown, setShowCountdown]   = useState(true)
   const [confetti, setConfetti]             = useState(false)
   const [showScrollTop, setShowScrollTop]   = useState(false)
@@ -367,18 +368,43 @@ export default function GiftListPage() {
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-800 mb-1">{gift.name}</h3>
                     <p className="text-xs text-gray-400 mb-3 leading-relaxed">{gift.description}</p>
+
+                    {/* Price + buy options toggle */}
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-display text-lg text-gold font-semibold">{gift.price}</span>
-                      <a
-                        href={gift.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-gray-400 hover:text-gold underline underline-offset-2 transition-colors"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        Ver produto →
-                      </a>
+                      {gift.buyOptions && gift.buyOptions.length > 0 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setExpandedOptions(expandedOptions === gift.id ? null : gift.id) }}
+                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gold transition-colors"
+                        >
+                          <ShoppingBag className="h-3.5 w-3.5" />
+                          Onde comprar
+                          {expandedOptions === gift.id
+                            ? <ChevronUp className="h-3 w-3" />
+                            : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                      )}
                     </div>
+
+                    {/* Expanded buy options */}
+                    {expandedOptions === gift.id && gift.buyOptions && (
+                      <div className="mb-3 rounded-xl border border-gold-light overflow-hidden divide-y divide-gold-light">
+                        {gift.buyOptions.map((opt, i) => (
+                          <a
+                            key={i}
+                            href={opt.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="flex items-center justify-between px-3 py-2 bg-cream hover:bg-gold-light/40 transition-colors"
+                          >
+                            <span className="text-xs font-medium text-gray-700">{opt.label}</span>
+                            <span className="text-xs text-gold font-semibold">{opt.price} →</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+
                     {isReservedByMe ? (
                       <span className="text-xs text-gold font-medium flex items-center gap-1">
                         <Check className="h-3 w-3" /> Escolhido por você
